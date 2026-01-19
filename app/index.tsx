@@ -7,12 +7,15 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  Alert,
 } from "react-native";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getCityFromCoord } from "./utils/location";
 
 const { width, height } = Dimensions.get("window");
 
@@ -27,6 +30,26 @@ export default function SetLocationScreen() {
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+
+  const savePreviousCity = async () => {
+    const cityName = await getCityFromCoord(region.latitude, region.longitude);
+    try {
+      await AsyncStorage.setItem(
+        "previous_city", 
+        JSON.stringify({
+          name: cityName,  // Or get from autocomplete
+          coordinates: {
+            lat: region.latitude,
+            lng: region.longitude,
+          },
+        })
+      );
+      console.log("✅ SAVED previous_city:", region.latitude, region.longitude);
+    } catch (error) {
+      console.error("❌ Storage error:", error);
+      Alert.alert("Error", "Failed to save location");
+    }
+  };
 
   // get current device location
   const getCurrentLocation = async () => {
@@ -61,7 +84,8 @@ export default function SetLocationScreen() {
     });
     return;
   }
-
+  // save current location as previous_city
+  savePreviousCity()
   // normal flow if user opened app fresh
   router.push({
     pathname: "/frequent-places",

@@ -6,6 +6,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location'
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getCityFromCoord } from './utils/location';
+import { get } from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
 
 const { width, height } = Dimensions.get("window");
 
@@ -13,7 +15,7 @@ export default function TargetCity() {
   const router = useRouter();
   const params = useLocalSearchParams(); // Access data from index and frequent-places
   const mapRef = useRef<MapView | null>(null);
-  
+
   const [loading, setLoading] = useState(false);
   const [region, setRegion] = useState({
     latitude: 40.7128,
@@ -36,58 +38,87 @@ export default function TargetCity() {
 
   const handleConfirm = async () => {
     setLoading(true);
+    const prevCityLat = parseFloat(params.latitude as string);
+    const prevCityLng = parseFloat(params.longitude as string);
 
     try {
-      // 1. Retrieve the frequent places we stored in AsyncStorage on page 2
+      // 1. Get frequent places from AsyncStorage
       const storedPlaces = await AsyncStorage.getItem("frequent-places");
       const preferencePlaces = storedPlaces ? JSON.parse(storedPlaces) : [];
+      const prevCity = await AsyncStorage.getItem("previous_city");
+      const prevLat = prevCity ? JSON.parse(prevCity).coordinates.lat : 0;
+      const prevLng = prevCity ? JSON.parse(prevCity).coordinates.lng : 0;
+      const prevName = prevCity ? JSON.parse(prevCity).name : "c0";
+      const currCity = await getCityFromCoord(region.latitude, region.longitude);
 
-      // 2. Construct the exact JSON payload
+      // 2. Build payload exactly as your backend expects
       const payload = {
-        sourceLocation: {
-          latitude: parseFloat(params.latitude as string),
-          longitude: parseFloat(params.longitude as string),
+        previous_city: {
+          name: prevName,
+          coordinates: {
+            lat: prevLat,
+            lng: prevLng,
+          },
         },
-        preferencePlaces: preferencePlaces.map((p: any) => ({
-          name: p.name,
-          category: p.category.toLowerCase(),
-          latitude: p.latitude,
-          longitude: p.longitude,
+
+        current_city: {
+          name: currCity, // destination city name unknown → ""
+          coordinates: {
+            lat: region.latitude,
+            lng: region.longitude,
+          },
+        },
+
+        source_places: preferencePlaces.map((p: any) => ({
+          type: p.category?.toLowerCase() || "",
+          name: p.name || "c2",
+          coordinates: {
+            lat: p.latitude,
+            lng: p.longitude,
+          },
         })),
-        targetLocation: {
-          latitude: region.latitude,
-          longitude: region.longitude,
-        },
       };
 
-      // 3. Send to Backend
-      const response = await fetch('https://your-api-endpoint.com/recommendations', {
-        method: 'POST',
+
+      console.log("Sending payload:", JSON.stringify(payload, null, 2));
+
+      // 3. Real API call
+      const response = await fetch("http://nami-hdya.onrender.com/api/recommend", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        await AsyncStorage.multiRemove(["frequent-places", "frequent-places-draft"]);
-        
-        router.push({
-          pathname: "/recommendations", // Your 4th page
-          params: { results: JSON.stringify(data) } 
-        });
-      } else {
-        Alert.alert("Error", "Failed to fetch recommendations from server.");
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
       }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Network Error", "Could not connect to the backend.");
+
+      const text = await response.text();
+      console.log("RAW RESPONSE:", text);
+
+      const data = text ? JSON.parse(text) : null;
+
+
+      await AsyncStorage.multiRemove(["frequent-places", "frequent-form"]);
+
+      router.push({
+        pathname: "/recommendations",
+        params: { results: JSON.stringify(data) },
+      });
+    } catch (error: any) {
+      console.error("API Error:", error);
+      Alert.alert(
+        "Failed to get recommendations",
+        error.message || "Please check your connection and try again.",
+        [{ text: "OK" }]
+      );
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <View style={styles.container}>
@@ -128,13 +159,13 @@ export default function TargetCity() {
           <Ionicons name="locate-outline" size={20} color="#111827" />
           <Text style={styles.useLocationText}>Use Current Location</Text>
         </TouchableOpacity>
-        
+
         <Text style={styles.coordsText}>
           TARGET: {region.latitude.toFixed(4)}, {region.longitude.toFixed(4)}
         </Text>
 
-        <TouchableOpacity 
-          style={[styles.confirmBtn, loading && { opacity: 0.7 }]} 
+        <TouchableOpacity
+          style={[styles.confirmBtn, loading && { opacity: 0.7 }]}
           onPress={handleConfirm}
           disabled={loading}
         >
