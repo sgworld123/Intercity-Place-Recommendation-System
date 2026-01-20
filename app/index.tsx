@@ -35,7 +35,7 @@ export default function SetLocationScreen() {
     const cityName = await getCityFromCoord(region.latitude, region.longitude);
     try {
       await AsyncStorage.setItem(
-        "previous_city", 
+        "previous_city",
         JSON.stringify({
           name: cityName,  // Or get from autocomplete
           coordinates: {
@@ -74,27 +74,27 @@ export default function SetLocationScreen() {
   }, []);
 
   const handleConfirm = () => {
-  if (params.mode === "place") {
-    router.replace({
-      pathname: (params.returnTo as string) || "/frequent-places",
+    if (params.mode === "place") {
+      router.replace({
+        pathname: (params.returnTo as string) || "/frequent-places",
+        params: {
+          placeLat: String(region.latitude),
+          placeLng: String(region.longitude),
+        },
+      });
+      return;
+    }
+    // save current location as previous_city
+    savePreviousCity()
+    // normal flow if user opened app fresh
+    router.push({
+      pathname: "/frequent-places",
       params: {
-        placeLat: String(region.latitude),
-        placeLng: String(region.longitude),
+        latitude: region.latitude,
+        longitude: region.longitude,
       },
     });
-    return;
-  }
-  // save current location as previous_city
-  savePreviousCity()
-  // normal flow if user opened app fresh
-  router.push({
-    pathname: "/frequent-places",
-    params: {
-      latitude: region.latitude,
-      longitude: region.longitude,
-    },
-  });
-};
+  };
 
 
   return (
