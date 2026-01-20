@@ -9,7 +9,7 @@ import {
   Platform,
   Alert,
 } from "react-native";
-import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import * as Location from "expo-location";
 import { GooglePlacesAutocomplete } from "react-native-google-places-autocomplete";
 import { Ionicons } from "@expo/vector-icons";
@@ -19,17 +19,55 @@ import { getCityFromCoord } from "./utils/location";
 
 const { width, height } = Dimensions.get("window");
 
+
 export default function SetLocationScreen() {
+  const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   const router = useRouter();
-  const params = useLocalSearchParams();
+
+  // const params = useLocalSearchParams();
   const mapRef = useRef<MapView | null>(null);
+  const { mode, lat, lng, returnTo } = useLocalSearchParams();
+  const isPlaceMode = mode === "place";
+
 
   const [region, setRegion] = useState({
-    latitude: 40.7128,
-    longitude: -74.006,
+    latitude: 28.6139,
+    longitude: 77.2090,
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
+
+  useEffect(() => {
+    (async () => {
+      const req = await Location.requestForegroundPermissionsAsync();
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (isPlaceMode && lat && lng) {
+      const newRegion = {
+        latitude: Number(lat),
+        longitude: Number(lng),
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      };
+
+      setRegion(prev => {
+        // 🛑 prevent unnecessary state updates
+        if (
+          prev.latitude === newRegion.latitude &&
+          prev.longitude === newRegion.longitude
+        ) {
+          return prev;
+        }
+        return newRegion;
+      });
+
+      mapRef.current?.animateToRegion(newRegion, 600);
+    }
+  }, [isPlaceMode, lat, lng]);
+
+
 
   const savePreviousCity = async () => {
     const cityName = await getCityFromCoord(region.latitude, region.longitude);
@@ -51,103 +89,110 @@ export default function SetLocationScreen() {
     }
   };
 
+  const handleRegionChangeComplete = (newRegion: any) => {
+  if (!isPlaceMode) {
+    setRegion(newRegion);
+  }
+};
+
+
   // get current device location
   const getCurrentLocation = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== "granted") return;
-
-    const location = await Location.getCurrentPositionAsync({});
-    const { latitude, longitude } = location.coords;
-
-    const newRegion = {
-      ...region,
-      latitude,
-      longitude,
-    };
-
-    setRegion(newRegion);
-    mapRef.current?.animateToRegion(newRegion, 800);
-  };
-
-  useEffect(() => {
-    getCurrentLocation();
-  }, []);
-
-  const handleConfirm = () => {
-    if (params.mode === "place") {
-      router.replace({
-        pathname: (params.returnTo as string) || "/frequent-places",
-        params: {
-          placeLat: String(region.latitude),
-          placeLng: String(region.longitude),
-        },
+    const lastLocation = await Location.getLastKnownPositionAsync();
+    if (lastLocation) {
+      setRegion({
+        latitude: lastLocation.coords.latitude,
+        longitude: lastLocation.coords.longitude,
+        latitudeDelta: 0.05,
+        longitudeDelta: 0.05,
       });
-      return;
     }
-    // save current location as previous_city
-    savePreviousCity()
-    // normal flow if user opened app fresh
-    router.push({
-      pathname: "/frequent-places",
-      params: {
-        latitude: region.latitude,
-        longitude: region.longitude,
-      },
+
+    // 2. Fetch fresh location in background
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced, // 🔥 KEY CHANGE
+    });
+
+    setRegion({
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      latitudeDelta: 0.05,
+      longitudeDelta: 0.05,
     });
   };
+
+  const handleConfirm = () => {
+  if (isPlaceMode) {
+    router.replace(returnTo || "/frequent-places");
+    return;
+  }
+
+  // ✅ PICK MODE
+  router.replace({
+    pathname: returnTo || "/frequent-places",
+    params: {
+      latitude: String(region.latitude),
+      longitude: String(region.longitude),
+    },
+  });
+};
+
+
 
 
   return (
     <View style={styles.container}>
       {/* Search bar */}
-      <View style={styles.searchBox}>
-        <GooglePlacesAutocomplete
-          placeholder="Search for a location"
-          fetchDetails
-          enablePoweredByContainer={false}
-          onPress={(data, details = null) => {
-            if (!details) return;
-            const { lat, lng } = details.geometry.location;
+      {!isPlaceMode && (
+        <View style={styles.searchBox}>
+          <GooglePlacesAutocomplete
+            placeholder="Search for a location"
+            fetchDetails
+            enablePoweredByContainer={false}
+            onPress={(data, details = null) => {
+              if (!details) return;
+              const { lat, lng } = details.geometry.location;
 
-            const newRegion = {
-              ...region,
-              latitude: lat,
-              longitude: lng,
-            };
+              const newRegion = {
+                ...region,
+                latitude: lat,
+                longitude: lng,
+              };
 
-            setRegion(newRegion);
-            mapRef.current?.animateToRegion(newRegion, 800);
-          }}
-          query={{
-            key: "YOUR_GOOGLE_MAPS_API_KEY",
-            language: "en",
-          }}
-          styles={{
-            textInputContainer: {
-              borderRadius: 28,
-              backgroundColor: "#FFFFFF",
-              paddingHorizontal: 10,
-              paddingVertical: Platform.OS === "ios" ? 10 : 0,
-              shadowColor: "#000",
-              shadowOpacity: 0.06,
-              shadowRadius: 8,
-              shadowOffset: { width: 0, height: 2 },
-              elevation: 3,
-            },
-            textInput: {
-              height: 44,
-              borderRadius: 24,
-              fontSize: 16,
-              color: "#111827",
-            },
-            listView: {
-              backgroundColor: "#FFFFFF",
-              borderRadius: 12,
-              marginTop: 8,
-            },
-          }}
-        />
-      </View>
+              setRegion(newRegion);
+              mapRef.current?.animateToRegion(newRegion, 800);
+            }}
+            query={{
+              key: GOOGLE_MAPS_API_KEY,
+              language: "en",
+            }}
+            styles={{
+              textInputContainer: {
+                borderRadius: 28,
+                backgroundColor: "#FFFFFF",
+                paddingHorizontal: 10,
+                paddingVertical: Platform.OS === "ios" ? 10 : 0,
+                shadowColor: "#000",
+                shadowOpacity: 0.06,
+                shadowRadius: 8,
+                shadowOffset: { width: 0, height: 2 },
+                elevation: 3,
+              },
+              textInput: {
+                height: 44,
+                borderRadius: 24,
+                fontSize: 16,
+                color: "#111827",
+              },
+              listView: {
+                backgroundColor: "#FFFFFF",
+                borderRadius: 12,
+                marginTop: 8,
+              },
+            }}
+          />
+        </View>
+      )}
 
       {/* Map */}
       <MapView
@@ -155,15 +200,27 @@ export default function SetLocationScreen() {
         provider={PROVIDER_GOOGLE}
         style={styles.map}
         region={region}
-        onRegionChangeComplete={setRegion}
-      />
+        onRegionChangeComplete={handleRegionChangeComplete}
+      >
+        {isPlaceMode && lat && lng && (
+          <Marker
+            coordinate={{
+              latitude: Number(lat),
+              longitude: Number(lng),
+            }}
+          />
+        )}
+      </MapView>
+
 
       {/* Center pin (overlay) */}
-      <View pointerEvents="none" style={styles.centerPinWrapper}>
-        <View style={styles.centerPinOuter}>
-          <View style={styles.centerPinInner} />
+      {!isPlaceMode && (
+        <View pointerEvents="none" style={styles.centerPinWrapper}>
+          <View style={styles.centerPinOuter}>
+            <View style={styles.centerPinInner} />
+          </View>
         </View>
-      </View>
+      )}
 
       {/* Zoom & current location controls */}
       <View style={styles.mapControls}>
@@ -203,20 +260,22 @@ export default function SetLocationScreen() {
       </View>
 
       {/* Bottom sheet */}
-      <View style={styles.bottomSheet}>
-        <TouchableOpacity style={styles.useLocationBtn} onPress={getCurrentLocation}>
-          <Ionicons name="navigate" size={18} color="#0F766E" />
-          <Text style={styles.useLocationText}>Use my current location</Text>
-        </TouchableOpacity>
+      {!isPlaceMode && (
+        <View style={styles.bottomSheet}>
+          <TouchableOpacity style={styles.useLocationBtn} onPress={getCurrentLocation}>
+            <Ionicons name="navigate" size={18} color="#0F766E" />
+            <Text style={styles.useLocationText}>Use my current location</Text>
+          </TouchableOpacity>
 
-        <Text style={styles.coordsText}>
-          LAT: {region.latitude.toFixed(4)}, LONG: {region.longitude.toFixed(4)}
-        </Text>
+          <Text style={styles.coordsText}>
+            LAT: {region.latitude.toFixed(4)}, LONG: {region.longitude.toFixed(4)}
+          </Text>
 
-        <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-          <Text style={styles.confirmText}>Confirm Location</Text>
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
+            <Text style={styles.confirmText}>Confirm Location</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -258,6 +317,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: Platform.OS === "ios" ? 40 : 20,
     width: "90%",
+    borderRadius: 28,
     alignSelf: "center",
     zIndex: 15,
   },

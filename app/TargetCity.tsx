@@ -10,6 +10,8 @@ import { getCityFromCoord } from './utils/location';
 import { get } from 'react-native/Libraries/TurboModule/TurboModuleRegistry';
 
 const { width, height } = Dimensions.get("window");
+const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
 
 export default function TargetCity() {
   const router = useRouter();
@@ -18,13 +20,13 @@ export default function TargetCity() {
 
   const [loading, setLoading] = useState(false);
   const [region, setRegion] = useState({
-    latitude: 40.7128,
-    longitude: -74.006,
+    latitude: 28.6139,
+    longitude: 77.2090,
     latitudeDelta: 0.05,
     longitudeDelta: 0.05,
   });
 
-  const saveCurrentCity = async () => { 
+  const saveCurrentCity = async () => {
     const cityName = await getCityFromCoord(region.latitude, region.longitude);
     try {
       await AsyncStorage.setItem("current_city", JSON.stringify({
@@ -74,7 +76,7 @@ export default function TargetCity() {
             mapRef.current?.animateToRegion(newRegion, 800);
           }}
           query={{
-            key: "YOUR_GOOGLE_MAPS_API_KEY",
+            key: GOOGLE_MAPS_API_KEY,
             language: "en",
           }}
         />
@@ -157,6 +159,7 @@ const styles = StyleSheet.create({
     top: Platform.OS === "ios" ? 40 : 20,
     width: "90%",
     alignSelf: "center",
+    borderRadius: 28,
     zIndex: 15,
   },
 

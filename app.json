@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "AppCity",
-    "slug": "AppCity",
+    "name": "MoveWise",
+    "slug": "MoveWise",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "appcity",
+    "scheme": "movewise",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
