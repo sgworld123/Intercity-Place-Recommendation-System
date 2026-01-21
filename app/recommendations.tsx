@@ -23,12 +23,14 @@ const getSimilarityPercentage = (item: any) => {
 export default function recommendations() {
   const [places, setPlaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const prepareAndSendPayload = async () => {
       try {
         // 1️⃣ Read from AsyncStorage
         setLoading(true);
+        setError(null);
         const [
           storedPrevCity,
           storedCurrCity,
@@ -109,9 +111,16 @@ export default function recommendations() {
             }))
           ) ?? [];
 
+        if (extracted.length === 0) {
+          setError("No recommendations found. Please try again later.");
+        }
+
         setPlaces(extracted);
-      } catch (error) {
-        console.error("Error preparing payload:", error);
+      } catch (error: any) {
+        console.error("Error:", error);
+        // Show an alert so you can debug in production
+        alert(`Error fetching data: ${error.message}`);
+        setError("Failed to load recommendations. Please try again.");
       }
       finally {
         setLoading(false);
@@ -129,6 +138,17 @@ export default function recommendations() {
       </View>
     );
   }
+
+  if (error) {
+  return (
+    <View style={styles.center}>
+      <Text style={{ color: 'red', fontSize: 16 }}>{error}</Text>
+      <TouchableOpacity onPress={() => router.back()} style={[styles.button, { marginTop: 20 }]}>
+         <Text style={styles.buttonText}>Go Back</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
 
   return (
     <FlatList
